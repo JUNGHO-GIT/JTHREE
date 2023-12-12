@@ -1,10 +1,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { FontLoader } from "three/addons/loaders/FontLoader.js";
 import { TextGeometry } from "three/addons/geometries/TextGeometry.js";
-import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+
+// 0. 전역 변수 ----------------------------------------------------------------------------------->
+let draggableObjects = [];
+let floorCount = 0;
+let cubeCount = 0;
 
 // 1. 배경 설정 ----------------------------------------------------------------------------------->
 const scene = new THREE.Scene();
@@ -26,10 +28,11 @@ const renderer = new THREE.WebGLRenderer({
   premultipliedAlpha: true,
   preserveDrawingBuffer: true,
   failIfMajorPerformanceCaveat: false,
-  // logarithmicDepthBuffer: true
+  logarithmicDepthBuffer: true
 });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 // 4. 컨트롤 설정 --------------------------------------------------------------------------------->
@@ -38,7 +41,6 @@ controls.target.set(0, 0, 0);
 controls.update();
 
 // 5. 조명 설정 ----------------------------------------------------------------------------------->
-// more nature lightning
 const light = new THREE.HemisphereLight(0xffffff, 0x444444);
 light.position.set(0, 200, 0);
 scene.add(light);
@@ -53,172 +55,309 @@ directionalLight.shadow.camera.left = -120;
 directionalLight.shadow.camera.right = 120;
 scene.add(directionalLight);
 
-// 바닥 설정 -------------------------------------------------------------------------------------->
-const floorGeometry = new THREE.BoxGeometry(15, 0.3, 15); // 가로, 두깨, 세로
-const floorMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
-const floorTexture = new THREE.TextureLoader().load("floor2.png");
-const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-floorMaterial.map = floorTexture;
-floor.rotation.set(0, 0, 0);
-floor.position.set(0, 0.5, 0);
-floor.receiveShadow = true;
-scene.add(floor);
+// 7. 폰트 설정 ----------------------------------------------------------------------------------->
+function fontLoader(numberParam, positionParam) {
+  return new Promise(resolve => {
+    const fontLoader = new FontLoader();
+    const fontUrl = "https://threejsfundamentals.org/threejs/resources/threejs/fonts/helvetiker_regular.typeface.json";
+    fontLoader.load(fontUrl, font => {
+      const textGeometry = new TextGeometry(`Floor ${numberParam}`, {
+        font: font,
+        size: 1,
+        height: 0.2,
+        curveSegments: 1,
+        bevelEnabled: false
+      });
+      const textMaterial = new THREE.MeshBasicMaterial({ color: 0xeeeeee });
+      const textMesh = new THREE.Mesh(textGeometry, textMaterial);
 
-// 4. 객체 생성 ----------------------------------------------------------------------------------->
-const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
-const textureLoader = new THREE.TextureLoader();
-boxGeometry.translate(0, 0.5, 0);
-const boxMaterials = [
-  new THREE.MeshBasicMaterial({ map: textureLoader.load("1.png"), transparent: true }),
-  new THREE.MeshBasicMaterial({ map: textureLoader.load("2.png"), transparent: true }),
-  new THREE.MeshBasicMaterial({ map: textureLoader.load("3.png"), transparent: true })
-];
+      // 글자의 바운딩 박스 계산
+      textGeometry.computeBoundingBox();
+      const textSize = textGeometry.boundingBox.getSize(new THREE.Vector3());
 
-// 큐브 생성 및 씬에 추가 ------------------------------------------------------------------------->
-let draggableObjects = [];
-boxMaterials.forEach((material, index) => {
-  const cube = new THREE.Mesh(boxGeometry, material);
-  cube.castShadow = true;
-  cube.rotation.set(0, 0, 0);
-  cube.position.set((index - 1) * 2.4, 0.5, 0);
-  cube.scale.set(2, 3, 2);
-  scene.add(cube);
+      // 텍스트를 floor 오브젝트의 중앙에 정렬
+      textMesh.position.set(
+        positionParam.x - textSize.x / 2,
+        positionParam.y,
+        positionParam.z - textSize.z / 2
+      );
+      textMesh.rotation.x = -Math.PI / 2;
+      textMesh.scale.set(1, 1, 1);
 
-  // 큐브를 드래그 가능한 객체 배열에 추가
-  draggableObjects.push(cube);
-});
-
-// 큐브 생성 함수
-function createCube() {
-  // 사용자 입력 가져오기
-  const color = document.getElementById('cubeColor').value;
-  const size = parseFloat(document.getElementById('cubeSize').value) || 1; // 기본값 1
-
-  // 큐브 생성
-  const geometry = new THREE.BoxGeometry(size, size, size);
-  const material = new THREE.MeshBasicMaterial({ color: color });
-  const cube = new THREE.Mesh(geometry, material);
-  // 카메라 위치를 고려하여 큐브 위치 설정
-  cube.position.set(0, 10, 25); // 화면 중앙에 큐브 배치
-  cube.castShadow = true;
-  scene.add(cube);
-}
-
-
-// 텍스트 로딩 및 설정 ---------------------------------------------------------------------------->
-const fontLoader = new FontLoader();
-fontLoader.load('https://threejsfundamentals.org/threejs/resources/threejs/fonts/helvetiker_regular.typeface.json', function (font) {
-  const textGeometry = new TextGeometry('WMS', {
-    font: font,
-    size: 0.8,
-    height: 0.2,
-    curveSegments: 1,
-    bevelEnabled: false
-  });
-  const textMaterial = new THREE.MeshBasicMaterial({ color: 0xeee });
-  const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-  textMesh.quaternion.copy(camera.quaternion);
-  textMesh.position.set(-1, 1, 4);
-  textMesh.rotation.set(0, 0, 0);
-  scene.add(textMesh);
-});
-
-// 텍스트 생성 함수
-function createText () {
-  const userInput = document.getElementById('userText').value;
-  if (!userInput) {
-    alert("Please enter some text");
-    return;
-  }
-
-  const fontLoader = new THREE.FontLoader();
-  fontLoader.load('https://threejsfundamentals.org/threejs/resources/threejs/fonts/helvetiker_regular.typeface.json', function (font) {
-    const textGeometry = new THREE.TextGeometry(userInput, {
-      font: font,
-      size: 0.8,
-      height: 0.2,
-      curveSegments: 12,
-      bevelEnabled: false
+      resolve(textMesh);
     });
-
-    const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-    textMesh.position.set(0, 10, 25); // 위치 조정 필요
-    scene.add(textMesh);
   });
 }
 
-// 큐브 드래그해서 움직일수 있도록 상호작용 추가 -------------------------------------------------->
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-const offset = new THREE.Vector3();
-let selectedObject = null;
-let isDragging = false;
-
-const onMouseDown = event => {
-  event.preventDefault();
-  isDragging = true;
-
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-  raycaster.setFromCamera(mouse, camera);
-
-  // 드래그 가능한 객체들만 검사
-  const intersects = raycaster.intersectObjects(draggableObjects);
-  if (intersects.length > 0) {
-    controls.enabled = false;
-    selectedObject = intersects[0].object;
-    const floorIntersects = raycaster.intersectObject(floor);
-    if (floorIntersects.length > 0) {
-      offset.copy(floorIntersects[0].point).sub(selectedObject.position);
-    }
-  }
+// 바닥 설정 -------------------------------------------------------------------------------------->
+function initFloor() {
+  const floorGeometry = new THREE.BoxGeometry(15, 0.3, 15); // 가로, 두깨, 세로
+  const floorMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
+  const floorTexture = new THREE.TextureLoader().load("/imgs/three/floor2.png");
+  const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+  floorMaterial.map = floorTexture;
+  floor.rotation.set(0, 0, 0);
+  floor.position.set(0, 0.5, 0);
+  floor.scale.set(1, 1, 1);
+  floor.name = "floor";
+  floor.receiveShadow = true;
+  scene.add(floor);
 };
 
-const onMouseMove = event => {
-  event.preventDefault();
-  if (!isDragging) return;
+// 바닥 생성 -------------------------------------------------------------------------------------->
+function createFloor() {
+  const floorGeometry = new THREE.BoxGeometry(15, 0.3, 15);
+  const floorMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
+  const floorTexture = new THREE.TextureLoader().load("/imgs/three/floor2.png");
+  floorMaterial.map = floorTexture;
 
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+  floor.rotation.set(0, 0, 0);
+  floor.position.set(20, 0.5, 0);
+  floor.scale.set(1, 1, 1);
+  floor.name = `floor-${floorCount}`;
+  floor.receiveShadow = true;
 
-  raycaster.setFromCamera(mouse, camera);
-  if (selectedObject) {
-    const intersects = raycaster.intersectObject(floor);
+  const floorGroup = new THREE.Group();
+  floorGroup.add(floor);
+
+  fontLoader(floorCount + 1, floor.position).then(textMesh => {
+    floorGroup.add(textMesh);
+    scene.add(floorGroup);
+    draggableObjects.push(floorGroup);
+  });
+
+  floorCount++;
+}
+
+// 바닥 생성 버튼 -------------------------------------------------------------------------------->
+function createFloorBtn () {
+  const addFloorBtn = document.createElement("button");
+  addFloorBtn.innerText = "Add Floor";
+  addFloorBtn.id = "addFloor";
+  addFloorBtn.style.cssText = `
+    position: absolute;
+    left: 50%;
+    bottom: 90px;
+    transform: translateX(-50%);
+    padding: 10px 20px;
+    font-size: 16px;
+    color: #fff;
+    background-color: #000;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  `;
+  addFloorBtn.addEventListener("click", () => {
+    createFloor();
+  });
+  document.body.appendChild(addFloorBtn);
+};
+
+// 4. 큐브 생성 ---------------------------------------------------------------------------------->
+function initCube() {
+  const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const textureLoader = new THREE.TextureLoader();
+  boxGeometry.translate(0, 0.5, 0);
+  const boxMaterials = [
+    new THREE.MeshBasicMaterial({
+      map: textureLoader.load("/imgs/three/1.png"),
+      transparent: true
+    }),
+    new THREE.MeshBasicMaterial({
+      map: textureLoader.load("/imgs/three/2.png"),
+      transparent: true
+    }),
+    new THREE.MeshBasicMaterial({
+      map: textureLoader.load("/imgs/three/3.png"),
+      transparent: true
+    })
+  ];
+  boxMaterials.forEach((material, index) => {
+    const cube = new THREE.Mesh(boxGeometry, material);
+    cube.rotation.set(0, 0, 0);
+    cube.position.set((index - 1) * 2.4, 0.5, 0);
+    cube.scale.set(2, 3, 2);
+    cube.name = `cube-${index}`;
+    cube.castShadow = true;
+    scene.add(cube);
+
+    draggableObjects.push(cube);
+  });
+};
+
+// 큐브 생성 -------------------------------------------------------------------------------------->
+function createCube() {
+  const newBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const newTextureLoader = new THREE.TextureLoader();
+  newBoxGeometry.translate(0, 0.5, 0);
+  const newMaterial = new THREE.MeshBasicMaterial({
+    map: newTextureLoader.load("/imgs/three/7.png"),
+    transparent: true
+  });
+  const newCube = new THREE.Mesh(newBoxGeometry, newMaterial);
+
+  // floor 중앙에 생성
+  newCube.position.set(0, 0.5, 0);
+  newCube.rotation.set(0, 0, 0);
+  newCube.scale.set(2, 3, 2);
+  newCube.castShadow = true;
+  newCube.name = `cube-${cubeCount}`;
+  draggableObjects.push(newCube);
+  scene.add(newCube);
+  saveLastPosition();
+
+  cubeCount++;
+}
+
+// 큐브 생성 버튼 -------------------------------------------------------------------------------->
+function createCubeBtn () {
+  const addCubeBtn = document.createElement("button");
+  addCubeBtn.innerText = "Add Cube";
+  addCubeBtn.id = "addCube";
+  addCubeBtn.style.cssText = `
+    position: absolute;
+    left: 50%;
+    bottom: 50px;
+    transform: translateX(-50%);
+    padding: 10px 20px;
+    font-size: 16px;
+    color: #fff;
+    background-color: #000;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  `;
+  addCubeBtn.addEventListener("click", () => {
+    createCube();
+  });
+  document.body.appendChild(addCubeBtn);
+};
+
+// 드래그해서 움직일수 있도록 상호작용 추가 ------------------------------------------------------->
+function dragControls() {
+
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  const offset = new THREE.Vector3();
+
+  const floorObjs = scene.children.find(obj => {
+    return obj.name.includes("floor");
+  });
+  let selectedObject = null;
+  let isDragging = false;
+
+  // mouseDown
+  const onMouseDown = (event) => {
+    event.preventDefault();
+    isDragging = true;
+
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+
+    const intersects = raycaster.intersectObjects(draggableObjects);
+
     if (intersects.length > 0) {
-      selectedObject.position.copy(intersects[0].point.sub(offset));
+      controls.enabled = false;
+      let intersectedObject = intersects[0].object;
+
+      // 부모가 THREE.Group인 경우, 해당 그룹을 선택 객체로 설정
+      selectedObject = intersectedObject.parent instanceof THREE.Group ? intersectedObject.parent : intersectedObject;
+
+      if (selectedObject instanceof THREE.Mesh && selectedObject.name.includes("cube-")) {
+        const floorIntersects = raycaster.intersectObject(floorObjs);
+        if (floorIntersects.length > 0) {
+          offset.copy(floorIntersects[0].point).sub(selectedObject.position);
+        }
+      }
+      else {
+        offset.copy(intersects[0].point).sub(selectedObject.position);
+      }
     }
-  }
-};
+  };
+  document.addEventListener("mousedown", onMouseDown, false);
 
-const onMouseUp = event => {
-  event.preventDefault();
-  isDragging = false;
-  controls.enabled = true;
-  selectedObject = null;
-};
+  // mouseMove
+  const onMouseMove = (event) => {
+    event.preventDefault();
+    if (!isDragging) {
+      return;
+    }
 
-document.addEventListener("mousemove", onMouseMove, false);
-document.addEventListener("mousedown", onMouseDown, false);
-document.addEventListener("mouseup", onMouseUp, false);
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+
+    if (selectedObject instanceof THREE.Mesh && selectedObject.name.includes("cube-")) {
+      const floorIntersects = raycaster.intersectObject(floorObjs);
+      if (floorIntersects.length > 0) {
+        selectedObject.position.copy(floorIntersects[0].point.sub(offset));
+      }
+    }
+    else if (selectedObject) {
+      const planeIntersect = raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3());
+      if (planeIntersect) {
+        selectedObject.position.copy(planeIntersect.sub(offset));
+      }
+    }
+  };
+  document.addEventListener("mousemove", onMouseMove, false);
+
+  // mouseUp
+  const onMouseUp = (event) => {
+    event.preventDefault();
+    isDragging = false;
+    controls.enabled = true;
+    selectedObject = null;
+  };
+  document.addEventListener("mouseup", onMouseUp, false);
+};
 
 // 마지막 위치 저장 ------------------------------------------------------------------------------->
-const saveLastPosition = () => {
+function saveLastPosition () {
 
-  const cubes = scene.children.filter(obj => obj.type === "Mesh");
+  const cubes = scene.children.filter(obj => {
+    return obj.name.includes("cube-");
+  });
 
-  const cubesPosition = cubes.map(obj => {
+  const cubesPosition = cubes.flatMap(obj => {
     return {
-      position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
-      rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
-      scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z }
+      metadata: {
+        id: obj.name,
+        uuid: obj.uuid
+      },
+      position: {
+        x: obj.position.x,
+        y: obj.position.y,
+        z: obj.position.z
+      },
+      rotation: {
+        x: obj.rotation.x,
+        y: obj.rotation.y,
+        z: obj.rotation.z
+      },
+      scale: {
+        x: obj.scale.x,
+        y: obj.scale.y,
+        z: obj.scale.z
+      }
     };
   });
 
   const cameraPosition = {
-    position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
-    rotation: { x: camera.rotation.x, y: camera.rotation.y, z: camera.rotation.z }
+    position: {
+      x: camera.position.x,
+      y: camera.position.y,
+      z: camera.position.z
+    },
+    rotation: {
+      x: camera.rotation.x,
+      y: camera.rotation.y,
+      z: camera.rotation.z
+    }
   };
 
   const saveData = {
@@ -226,145 +365,106 @@ const saveLastPosition = () => {
     camera: cameraPosition
   };
 
+  localStorage.clear();
   localStorage.setItem("lastPosition", JSON.stringify(saveData));
 };
 
-// 초기 위치 설정 -------------------------------------------------------------------------------->
-const initialPosition = () => {
-  const savedData = JSON.parse(localStorage.getItem("lastPosition"));
-  if (savedData) {
-    if (savedData.cubes) {
-      const cubes = scene.children.filter(obj => obj.type === "Mesh");
-      cubes.forEach((obj, index) => {
-        if (savedData.cubes[index]) {
-          obj.position.x = savedData.cubes[index].position.x;
-          obj.position.y = savedData.cubes[index].position.y;
-          obj.position.z = savedData.cubes[index].position.z;
-          obj.rotation.x = savedData.cubes[index].rotation.x;
-          obj.rotation.y = savedData.cubes[index].rotation.y;
-          obj.rotation.z = savedData.cubes[index].rotation.z;
-          obj.scale.x = savedData.cubes[index].scale.x;
-          obj.scale.y = savedData.cubes[index].scale.y;
-          obj.scale.z = savedData.cubes[index].scale.z;
-        }
-      });
-    }
+// 저장 버튼 -------------------------------------------------------------------------------------->
+function saveBtn () {
+  const saveBtn = document.createElement("button");
+  saveBtn.innerText = "Save Position";
+  saveBtn.style.cssText = `
+    position: absolute;
+    left: 50%;
+    bottom: 10px;
+    transform: translateX(-50%);
+    padding: 10px 20px;
+    font-size: 16px;
+    color: #fff;
+    background-color: #000;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  `;
 
-    if (savedData.camera) {
-      camera.position.x = savedData.camera.position.x;
-      camera.position.y = savedData.camera.position.y;
-      camera.position.z = savedData.camera.position.z;
-      camera.rotation.x = savedData.camera.rotation.x;
-      camera.rotation.y = savedData.camera.rotation.y;
-      camera.rotation.z = savedData.camera.rotation.z;
-    }
+  // 버튼 눌렀을때 효과 (애니메이션)
+  function clickedBtnAnimation() {
+    alert("Save Complete!");
+  }
+  requestAnimationFrame(animate);
+
+  // 버튼 눌렀을때 이벤트
+  saveBtn.addEventListener("click", () => {
+    saveLastPosition();
+    clickedBtnAnimation();
+  });
+  document.body.appendChild(saveBtn);
+};
+
+// 초기 위치 설정 -------------------------------------------------------------------------------->
+function initialPosition () {
+  const savedData = JSON.parse(localStorage.getItem("lastPosition"));
+  if (savedData && savedData.cubes) {
+    savedData.cubes.forEach(obj => {
+      const cubes = scene.children.find(child => {
+        return child.name === obj.metadata.id;
+      });
+      if (!cubes) {
+        const newBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
+        const newTextureLoader = new THREE.TextureLoader();
+        newBoxGeometry.translate(0, 0.5, 0);
+        const newMaterial = new THREE.MeshBasicMaterial({ map: newTextureLoader.load("/imgs/three/7.png"), transparent: true });
+        const newCube = new THREE.Mesh(newBoxGeometry, newMaterial);
+        newCube.position.set(obj.position.x, obj.position.y, obj.position.z);
+        newCube.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z);
+        newCube.scale.set(obj.scale.x, obj.scale.y, obj.scale.z);
+        newCube.castShadow = true;
+        newCube.name = obj.metadata.id;
+        draggableObjects.push(newCube);
+        scene.add(newCube);
+      }
+      if (cubes) {
+        cubes.position.x = obj.position.x;
+        cubes.position.y = obj.position.y;
+        cubes.position.z = obj.position.z;
+        cubes.rotation.x = obj.rotation.x;
+        cubes.rotation.y = obj.rotation.y;
+        cubes.rotation.z = obj.rotation.z;
+        cubes.scale.x = obj.scale.x;
+        cubes.scale.y = obj.scale.y;
+        cubes.scale.z = obj.scale.z;
+      }
+    });
+  }
+  if (savedData.camera) {
+    camera.position.x = savedData.camera.position.x;
+    camera.position.y = savedData.camera.position.y;
+    camera.position.z = savedData.camera.position.z;
+    camera.rotation.x = savedData.camera.rotation.x;
+    camera.rotation.y = savedData.camera.rotation.y;
+    camera.rotation.z = savedData.camera.rotation.z;
   }
 };
 
-// 버튼 추가 -------------------------------------------------------------------------------------->
-// 1) 저장 버튼
-const saveButton = document.createElement("button");
-saveButton.innerText = "Save Position";
-saveButton.id = "savePosition";
-saveButton.style.cssText = `
-  position: absolute;
-  left: 50%;
-  bottom: 10px;
-  transform: translateX(-50%);
-  padding: 10px 20px;
-  font-size: 16px;
-  color: #fff;
-  background-color: #000;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-`;
-// 버튼 눌렀을때 효과 (애니메이션)
-function clickedButtonAnimation() {
-  alert("Save Complete!");
-  saveButton.style.backgroundColor = "#333";
-  saveButton.style.transform = "translate(-50%, -50%) scale(0.95)";
-  setTimeout(() => {
-    saveButton.style.backgroundColor = "#000";
-    saveButton.style.transform = "translate(-50%, -50%) scale(1)";
-  }, 100);
-}
-requestAnimationFrame(animate);
+// 0. 이벤트 리스너 ------------------------------------------------------------------------------->
+document.addEventListener("DOMContentLoaded", () => {
+  initFloor();
+  createFloorBtn();
 
-// 버튼 눌렀을때 이벤트
-saveButton.addEventListener("click", () => {
-  saveLastPosition();
-  clickedButtonAnimation();
+  initCube();
+  createCubeBtn();
+
+  dragControls();
+  saveBtn();
+  initialPosition();
+
+  animate();
 });
 
-// 2) 큐브 추가 버튼
-const addCubeButton = document.createElement("button");
-addCubeButton.innerText = "Add Cube";
-addCubeButton.style.cssText = `
-  position: absolute;
-  left: 50%;
-  bottom: 50px;
-  transform: translateX(-50%);
-  padding: 10px 20px;
-  font-size: 16px;
-  color: #fff;
-  background-color: #000;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-`;
-addCubeButton.addEventListener("click", () => {
-  createCube();
-});
-
-// 3) 글자 추가 버튼
-const addTextInput = document.createElement("input");
-const addTextButton = document.createElement("button");
-addTextButton.innerText = "Add Text";
-addTextInput.id = "addText";
-// placeholder
-addTextInput.placeholder = "Type your text here";
-addTextInput.style.cssText = `
-  position: absolute;
-  left: 50%;
-  bottom: 130px;
-  transform: translateX(-50%);
-  padding: 10px 20px;
-  font-size: 16px;
-  color: #000;
-  background-color: #fff; // 밝은 배경 색상
-  border: 1px solid #000; // 테두리 추가
-  border-radius: 4px;
-  outline: none;
-  z-index: 1000; // z-index 추가
-`;
-addTextButton.style.cssText = `
-  position: absolute;
-  left: 50%;
-  bottom: 90px;
-  transform: translateX(-50%);
-  padding: 10px 20px;
-  font-size: 16px;
-  color: #fff;
-  background-color: #000;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-`;
-addTextButton.addEventListener("click", () => {
-  createText();
-});
-document.body.appendChild(saveButton);
-document.body.appendChild(addCubeButton);
-document.body.appendChild(addTextInput);
-document.body.appendChild(addTextButton);
-
-// 초기 위치 호출 -------------------------------------------------------------------------------->
-initialPosition();
-
-// 9. 렌더링 함수 --------------------------------------------------------------------------------->
+// 0. 렌더링 함수 --------------------------------------------------------------------------------->
 function animate() {
   requestAnimationFrame(animate);
   renderer.render(scene, camera);
+  controls.update();
 }
-animate();
+
